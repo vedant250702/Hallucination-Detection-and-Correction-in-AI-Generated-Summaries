@@ -65,10 +65,6 @@ def correct(data:correctionRequest):
         return {"status":404}
     
 
-@router.get("/test")
-def keyTest():
-    print("Testing ",os.getenv("deepseek_apikey"))
-    return {"msg":"testing_works"}
 
 
 
