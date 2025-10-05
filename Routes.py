@@ -5,14 +5,19 @@ from Pipeline.CorrectionLLMs import DeepseekAPI
 from nltk.tokenize import sent_tokenize
 from utils import detectionProcess
 import os
+from dotenv import load_dotenv
 
-
-deepseek_apikey=os.getenv("deepseek_apikey")
-
+load_dotenv()
 
 router=APIRouter(prefix="/api")
 pipeline=HallucinationPipeline("Razor2507/Roberta-Base-Finetuned","cpu")
-deepseek=DeepseekAPI(api_key=deepseek_apikey)
+
+deepseek=None
+
+
+deepseek_apikey=os.getenv("deepseek_apikey")
+if deepseek_apikey:
+    deepseek=DeepseekAPI(api_key=deepseek_apikey)
 
 
 # Detection Endpoint
@@ -46,20 +51,20 @@ class correctionRequest(BaseModel):
 @router.post("/correct")
 def correct(data:correctionRequest):
     try:
-        
-        if data.model=="mistral":
-            pass
-        elif data.model=="gemini":
-            pass
-        elif data.model=="deepseek":
-            correction=deepseek.correct(premise=data.article, summary=data.tag_summary)
-        
-        print(correction)
+        if deepseek_apikey:
+            if data.model=="deepseek":
+                correction=deepseek.correct(premise=data.article, summary=data.tag_summary)
+            else:
+                return {"available":0}
+            print(correction)
 
-        result=detectionProcess(article=data.article,summary=correction,pipeline=pipeline)
-        result["corrected_summary"]=correction
-        result["status"]=200
-        return result
+            result=detectionProcess(article=data.article,summary=correction,pipeline=pipeline)
+            result["corrected_summary"]=correction
+            result["status"]=200
+            result["available"]=1
+            return result
+        else:
+            return {"available":0}
     except Exception as e:
         print(e)
         return {"status":404}
@@ -67,8 +72,12 @@ def correct(data:correctionRequest):
 
 
 
-
-
+@router.post("/checkAvailability")
+def correctionAvailable():
+    if deepseek_apikey:
+        return {"available":1}
+    else:
+        return {"available":0}
 
 
 

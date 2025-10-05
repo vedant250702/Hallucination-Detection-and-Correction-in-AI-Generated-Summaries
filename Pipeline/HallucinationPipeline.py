@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 from nltk.tokenize import sent_tokenize
 import torch
-import requests
 import torch
 import xgboost as xgb
 
@@ -19,28 +18,20 @@ class HallucinationPipeline:
         self.arbiter=False
 
         # Large NLI model
-   
         self.roberta_large=BatchNLI("roberta-large-mnli",device=device)
-        # self.roberta_large_ynie=BatchNLI("ynie/roberta-large-snli_mnli_fever_anli_R1_R2_R3-nli",device=device)
         self.roberta_large_ynie=BatchNLI("MoritzLaurer/DeBERTa-v3-large-mnli-fever-anli-ling-wanli",device=device)
-        # self.roberta_large_ynie=BatchNLI("facebook/bart-large-mnli",device=device)
-        # self.roberta_large_ynie=BatchNLI("microsoft/deberta-v2-xxlarge-mnli",device=device)
-        
+
         # Correction models
         self.llm=llm_model
 
         # Arbiter Model
-        # self.arbiter=torch.load("./Arbiter-dataset/best_model.pt")
-        # self.arbiterModel=NeuralNetwork()
         self.arbiter_model=xgb.XGBClassifier()
         self.arbiter_model.load_model("./Models/ArbiterModel/arbiter_xgboost_model.json")
-
 
         # Storing the results of the predicted models
         self.detection_predicted_labels=[]
         self.detection_predicted_labels_after_correction=[]
         self.corrected_summary=[]
-
 
 
     # -------------------------------------------------------------
@@ -56,11 +47,6 @@ class HallucinationPipeline:
         prediction=torch.argmax(prob,dim=-1)
         entailment_score=prob[:,2]
         contra_score=prob[:,0]
-        # print("Logits : ",logit)
-        # print("Probability : \n",prob)
-        # print("Label : ",[self.labels[i] for i in prediction])
-        # print("\n")
-        # return prediction.tolist()
         return prediction.cpu().tolist(),entailment_score.cpu().tolist(), contra_score.cpu().tolist()
     
 
@@ -102,12 +88,6 @@ class HallucinationPipeline:
     #  -------------------------------------------------------------------------------------------
     #  | FUNCTION 5 : Decider neural network which combines the scores and give the final result |
     #  -------------------------------------------------------------------------------------------
-    # def arbiterNeuralNetwork(self,data):
-    #     data=torch.Tensor(data).to(self.device)
-    #     self.arbiterModel=self.arbiterModel.to(self.device)
-    #     self.arbiterModel.load_state_dict(self.arbiter["model_state_dict"])
-    #     results=self.arbiterModel(data)
-    #     return (torch.argmax(results,dim=-1).tolist(),torch.mean(results[::,0]).item(),torch.mean(results[::,2]).item())
     def arbiterModel(self,data):
         result=self.arbiter_model.predict_proba(data)
         sent_pred_label=np.argmax(result,axis=1)
@@ -212,29 +192,20 @@ class HallucinationPipeline:
                 features=np.stack([factual_score,contra_score,
                                    roberta_large_contra,roberta_large_neutral,roberta_large_entail,
                                    roberta_large_ynie_contra,roberta_large_ynie_neutral,roberta_large_ynie_entail                                   
-                                   ],
-                                  
-                                  axis=1)
-                # all_features.append(features)
+                                   ],axis=1)
+
 
                 # Arbiter Neural Network Output
                 sent_predicted_labels,contra_score,factual_score=self.arbiterModel(features)
-                # sent_predicted_labels,contra_score,factual_score=self.arbiterNeuralNetwork(features)
 
 
-
-            # summary_factual_score.append(np.mean(factual_score))
-            # summary_contradiction_score.append(np.mean(contra_score))
             summary_factual_score.append(np.mean(factual_score))
             summary_contradiction_score.append(np.mean(contra_score))
           
 
             # Label whether summary is factually correct or not
-            # SummaryPrediction=2 if factual_score>contra_score else 0
             SummaryPrediction=0 if 0 in sent_predicted_labels else 2
             sentence_predicted_labels.append(sent_predicted_labels)
-
-
 
             self.detection_predicted_labels.append(int(SummaryPrediction))
 
@@ -260,54 +231,6 @@ class HallucinationPipeline:
                 }
         return output
     
-
-
-
-    #  ---------------------------------------------------------
-    #  | Optional FUNCTION : Integrated all the above methods. |
-    #  ---------------------------------------------------------
-    def fetchData(self,url,depth=[],articleFieldName=None,summaryFieldName=None,limit=None):
-        try:
-            data=requests.get(url)
-            data=data.json()
-            article=[]
-            summary=[]
-            count=limit
-
-            for field in depth:
-                data=data[field]
-
-            if type(data)!=list:
-                data=[data]
-            
-            for index,i in enumerate(data):
-                print("Index : ",index)
-
-                if i.get(articleFieldName):
-                    article.append(str(i[articleFieldName]))
-                    if summaryFieldName and i[summaryFieldName]:
-                        summary.append(str(i[summaryFieldName]))
-                    else:
-                        #Create Summary and append
-                        result=self.llm.create(str(i[articleFieldName]))
-                        summary.append(result)
-                if count:
-                    count-=1
-                    if count<1:
-                        break
-            
-            # Detection and getting Factual Score.
-            data=np.column_stack([article,summary])
-            result=self.process(data,correct_the_summary=False)
-            data=np.column_stack([data,result["predictions"],result["factual_score"]])
-
-            df=pd.DataFrame(data,columns=["Article","Summary","Prediction","Factuality"])
-            return df
-    
-        except Exception as e:
-            print("Failed to fetch data:", e)
-            return None
-        
 
 
 class BatchNLI:
