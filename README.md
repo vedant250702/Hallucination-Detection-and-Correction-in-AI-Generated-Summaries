@@ -10,7 +10,7 @@ A FastAPI-powered backend service for detecting and correcting hallucinations in
 
 
 ### 2. Output of the application.
-![Detection Output](SampleOutput/output.png)
+![Detection Output](SampleOutput/Output.png)
 
 ---
 ##  Quick Start
